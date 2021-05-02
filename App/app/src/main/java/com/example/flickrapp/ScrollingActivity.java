@@ -1,5 +1,7 @@
 package com.example.flickrapp;
 
+import android.app.SearchManager;
+import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
 
@@ -10,6 +12,7 @@ import com.squareup.picasso.Picasso;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.MenuItemCompat;
 
 import android.os.Debug;
 import android.util.Log;
@@ -19,6 +22,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.SearchView;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -72,6 +76,8 @@ public class ScrollingActivity extends AppCompatActivity {
         }
     }
 
+
+    //TODO:Pageup button, search History, endless scrolling with recycler
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -94,9 +100,9 @@ public class ScrollingActivity extends AppCompatActivity {
         });
     }
 
-    public JSONObject requestPictures(String searchTerm) throws IOException, JSONException {
+    public JSONObject requestPictures(String query) throws IOException, JSONException {
         String urlString = "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=37ad288835e4c64f" +
-                "c0cb8af3f3a1a65d&format=json&nojsoncallback=1&page=" + pageNr++ + "&safe_search=1&text=" + searchTerm;
+                "c0cb8af3f3a1a65d&format=json&nojsoncallback=1&page=" + 1 + "&safe_search=1&text=" + query;
         URL url = new URL(urlString);
         HttpsURLConnection urlConnection = (HttpsURLConnection) url.openConnection();
         String jsonString = null;
@@ -130,10 +136,34 @@ public class ScrollingActivity extends AppCompatActivity {
         Picasso.get().load(url).into(img);
     }
 
+    private void newSearch(String query){
+        new SearchPicturesTask().execute(query);
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_scrolling, menu);
+        MenuItem searchItem = menu.findItem(R.id.action_search);
+
+        final SearchView searchView = (SearchView) MenuItemCompat.getActionView(searchItem);
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                // perform query here
+                // workaround to avoid issues with some emulators and keyboard devices firing twice if a keyboard enter is used
+                // see https://code.google.com/p/android/issues/detail?id=24599
+                newSearch(query);
+                searchView.clearFocus();
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                return false;
+            }
+        });
         return true;
     }
 
@@ -147,6 +177,10 @@ public class ScrollingActivity extends AppCompatActivity {
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             return true;
+        }
+
+        if (id == R.id.action_search) {
+            Log.d("Scrolling", "Searchbutton");
         }
         return super.onOptionsItemSelected(item);
     }
