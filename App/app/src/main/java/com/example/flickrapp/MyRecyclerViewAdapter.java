@@ -54,9 +54,15 @@ public class MyRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         return mData.size();
     }
 
+    public void clear() {
+        int curSize = getItemCount();
+        this.mData.clear();
+        notifyItemRangeRemoved(0, curSize);
+    }
+
     public void addData(List<String> newData) {
         int curSize = getItemCount();
         this.mData.addAll(newData);
-        notifyItemRangeInserted(curSize,newData.size());
+        notifyItemRangeInserted(curSize, newData.size());
     }
 }

@@ -1,7 +1,5 @@
 package com.example.flickrapp;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Bundle;
 
@@ -10,6 +8,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.squareup.picasso.Picasso;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.MenuItemCompat;
@@ -35,23 +34,29 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import javax.net.ssl.HttpsURLConnection;
 
 public class ScrollingActivity extends AppCompatActivity {
-    private int testID = 0;
+
     private int pageNr = 1;
+    private int maxPageNr;
+    private String curSearchTerm;
     private RecyclerView scrollablePictures;
     private MyRecyclerViewAdapter recyclerViewAdapter;
+
+    private boolean loading = false;
+    int pastVisiblesItems, visibleItemCount, totalItemCount;
+
 
     private class SearchPicturesTask extends AsyncTask<String, Void, JSONObject> {
 
         @Override
         protected JSONObject doInBackground(String... strings) {
             try {
-                return requestPictures(strings[0]);
+                Log.d("Scrolling", "requesting: " + strings[0] + " on page: " + pageNr);
+                return requestPictures(strings[0], pageNr);
             } catch (IOException e) {
                 e.printStackTrace();
             } catch (JSONException e) {
@@ -66,6 +71,7 @@ public class ScrollingActivity extends AppCompatActivity {
             List<String> imageUrlStrings = new ArrayList<>();
             try {
                 JSONObject photoPage = jsonObject.getJSONObject("photos");
+                maxPageNr = photoPage.getInt("pages");
                 JSONArray photos = photoPage.getJSONArray("photo");
                 for (int i = 0; i < photos.length(); i++) {
                     JSONObject photo = photos.optJSONObject(i);
@@ -77,6 +83,7 @@ public class ScrollingActivity extends AppCompatActivity {
             }
 
             recyclerViewAdapter.addData(imageUrlStrings);
+            loading = false;
         }
     }
 
@@ -120,9 +127,35 @@ public class ScrollingActivity extends AppCompatActivity {
 
 
         RecyclerView recyclerView = findViewById(R.id.ScrollablePic);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        LinearLayoutManager mLayoutManager = new LinearLayoutManager(this);
+        recyclerView.setLayoutManager(mLayoutManager);
         recyclerViewAdapter = new MyRecyclerViewAdapter(this, new ArrayList<>());
         recyclerView.setAdapter(recyclerViewAdapter);
+
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy > 0) { //check for scroll down
+                    visibleItemCount = mLayoutManager.getChildCount();
+                    totalItemCount = mLayoutManager.getItemCount();
+                    pastVisiblesItems = mLayoutManager.findFirstVisibleItemPosition();
+
+                    if (!loading) {
+                        if ((visibleItemCount + pastVisiblesItems) >= totalItemCount) {
+
+                            Log.d("Scrolling", "End reached");
+                            if (pageNr <= maxPageNr - 1) {
+                                loading = true;
+                                pageNr++;
+                                new SearchPicturesTask().execute(curSearchTerm);
+                            } else {
+
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -135,9 +168,9 @@ public class ScrollingActivity extends AppCompatActivity {
         });
     }
 
-    public JSONObject requestPictures(String query) throws IOException, JSONException {
+    public JSONObject requestPictures(String query, int pageNr) throws IOException, JSONException {
         String urlString = "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=37ad288835e4c64f" +
-                "c0cb8af3f3a1a65d&format=json&nojsoncallback=1&page=" + 1 + "&safe_search=1&text=" + query;
+                "c0cb8af3f3a1a65d&format=json&nojsoncallback=1&page=" + pageNr + "&safe_search=1&text=" + query;
         URL url = new URL(urlString);
         HttpsURLConnection urlConnection = (HttpsURLConnection) url.openConnection();
         String jsonString = null;
@@ -170,6 +203,11 @@ public class ScrollingActivity extends AppCompatActivity {
     }
 
     private void newSearch(String query) {
+        loading = true;
+        pageNr = 1;
+        maxPageNr = -1;
+        recyclerViewAdapter.clear();
+        curSearchTerm = query;
         new SearchPicturesTask().execute(query);
     }
 
