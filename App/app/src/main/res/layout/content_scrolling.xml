@@ -8,13 +8,8 @@
     tools:context=".ScrollingActivity"
     tools:showIn="@layout/activity_scrolling">
 
-    <LinearLayout
+    <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/ScrollablePic"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:divider="@drawable/empty_divider"
-
-        android:orientation="vertical"
-        android:padding="@dimen/text_margin"
-        android:showDividers="middle"/>
+        android:layout_height="match_parent" />
 </androidx.core.widget.NestedScrollView>

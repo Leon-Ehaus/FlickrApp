@@ -1,7 +1,7 @@
 package com.example.flickrapp;
 
-import android.app.SearchManager;
-import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Bundle;
 
@@ -13,17 +13,15 @@ import com.squareup.picasso.Picasso;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.MenuItemCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
-import android.os.Debug;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.SearchView;
-import android.widget.TextView;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -37,13 +35,16 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import javax.net.ssl.HttpsURLConnection;
 
 public class ScrollingActivity extends AppCompatActivity {
     private int testID = 0;
     private int pageNr = 1;
-    private LinearLayout scrollablePictures;
+    private RecyclerView scrollablePictures;
+    private MyRecyclerViewAdapter recyclerViewAdapter;
 
     private class SearchPicturesTask extends AsyncTask<String, Void, JSONObject> {
 
@@ -62,19 +63,49 @@ public class ScrollingActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(JSONObject jsonObject) {
             super.onPostExecute(jsonObject);
+            List<String> imageUrlStrings = new ArrayList<>();
             try {
                 JSONObject photoPage = jsonObject.getJSONObject("photos");
                 JSONArray photos = photoPage.getJSONArray("photo");
                 for (int i = 0; i < photos.length(); i++) {
                     JSONObject photo = photos.optJSONObject(i);
                     String urlString = "https://farm" + photo.getInt("farm") + ".static.flickr.com/" + photo.getString("server") + "/" + photo.getString("id") + "_" + photo.getString("secret") + ".jpg";
-                    addPicture(photo.getString("title"), urlString);
+                    imageUrlStrings.add(urlString);
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
             }
+
+            recyclerViewAdapter.addData(imageUrlStrings);
         }
     }
+
+//    private class AccessPicturesTask extends AsyncTask<List<String>, Bitmap, Void> {
+//
+//        @Override
+//        protected Void doInBackground(List<String>... lists) {
+//            for (List<String> urls : lists) {
+//                for (String urlString : urls) {
+//                    URL url = null;
+//                    try {
+//                        url = new URL(urlString);
+//                        Bitmap bmp = BitmapFactory.decodeStream(url.openConnection().getInputStream());
+//                        publishProgress(bmp);
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            }
+//            return null;
+//        }
+//
+//        @Override
+//        protected void onProgressUpdate(Bitmap... values) {
+//            for(Bitmap value:values) {
+//                recyclerViewAdapter.addData(value);
+//            }
+//        }
+//    }
 
 
     //TODO:Pageup button, search History, endless scrolling with recycler
@@ -87,7 +118,11 @@ public class ScrollingActivity extends AppCompatActivity {
         CollapsingToolbarLayout toolBarLayout = (CollapsingToolbarLayout) findViewById(R.id.toolbar_layout);
         toolBarLayout.setTitle(getTitle());
 
-        scrollablePictures = findViewById(R.id.ScrollablePic);
+
+        RecyclerView recyclerView = findViewById(R.id.ScrollablePic);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerViewAdapter = new MyRecyclerViewAdapter(this, new ArrayList<>());
+        recyclerView.setAdapter(recyclerViewAdapter);
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -129,14 +164,12 @@ public class ScrollingActivity extends AppCompatActivity {
         //TODO: remove stackoverflow link
         //https://stackoverflow.com/questions/5776851/load-image-from-url
         View tmpView = getLayoutInflater().inflate(R.layout.picture_view, scrollablePictures, false);
-        TextView text = (TextView) tmpView.findViewById(R.id.textView2);
-        text.setText(title);
         scrollablePictures.addView(tmpView);
-        ImageView img = (ImageView) tmpView.findViewById(R.id.imageView6);
+        ImageView img = (ImageView) tmpView.findViewById(R.id.imageView);
         Picasso.get().load(url).into(img);
     }
 
-    private void newSearch(String query){
+    private void newSearch(String query) {
         new SearchPicturesTask().execute(query);
     }
 
