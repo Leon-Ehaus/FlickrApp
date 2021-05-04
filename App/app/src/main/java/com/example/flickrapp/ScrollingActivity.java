@@ -1,11 +1,11 @@
 package com.example.flickrapp;
 
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
 
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.snackbar.Snackbar;
 import com.squareup.picasso.Picasso;
 
 import androidx.annotation.NonNull;
@@ -15,12 +15,14 @@ import androidx.core.view.MenuItemCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.ImageView;
 import android.widget.SearchView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -34,7 +36,9 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -43,8 +47,9 @@ public class ScrollingActivity extends AppCompatActivity {
     private int pageNr = 1;
     private int maxPageNr;
     private String curSearchTerm;
-    private RecyclerView scrollablePictures;
-    private MyRecyclerViewAdapter recyclerViewAdapter;
+    private RecyclerView.Adapter recyclerViewAdapter;
+
+    private boolean imageDisplayActive;
 
     private boolean loading = false;
     int pastVisiblesItems, visibleItemCount, totalItemCount;
@@ -65,6 +70,7 @@ public class ScrollingActivity extends AppCompatActivity {
             return null;
         }
 
+
         @Override
         protected void onPostExecute(JSONObject jsonObject) {
             super.onPostExecute(jsonObject);
@@ -72,6 +78,11 @@ public class ScrollingActivity extends AppCompatActivity {
             try {
                 JSONObject photoPage = jsonObject.getJSONObject("photos");
                 maxPageNr = photoPage.getInt("pages");
+                if (maxPageNr == 0){
+                    failedSearch();
+                    loading = false;
+                    return;
+                }
                 JSONArray photos = photoPage.getJSONArray("photo");
                 for (int i = 0; i < photos.length(); i++) {
                     JSONObject photo = photos.optJSONObject(i);
@@ -82,40 +93,22 @@ public class ScrollingActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
 
-            recyclerViewAdapter.addData(imageUrlStrings);
+            ((ImageRecyclerViewAdapter) recyclerViewAdapter).addData(imageUrlStrings);
             loading = false;
         }
     }
 
-//    private class AccessPicturesTask extends AsyncTask<List<String>, Bitmap, Void> {
-//
-//        @Override
-//        protected Void doInBackground(List<String>... lists) {
-//            for (List<String> urls : lists) {
-//                for (String urlString : urls) {
-//                    URL url = null;
-//                    try {
-//                        url = new URL(urlString);
-//                        Bitmap bmp = BitmapFactory.decodeStream(url.openConnection().getInputStream());
-//                        publishProgress(bmp);
-//                    } catch (IOException e) {
-//                        e.printStackTrace();
-//                    }
-//                }
-//            }
-//            return null;
-//        }
-//
-//        @Override
-//        protected void onProgressUpdate(Bitmap... values) {
-//            for(Bitmap value:values) {
-//                recyclerViewAdapter.addData(value);
-//            }
-//        }
-//    }
+    //TOD:Change toast background
+    private void failedSearch(){
+        Toast toast = Toast.makeText(this,getString(R.string.no_images),Toast.LENGTH_LONG);
+        toast.show();
+    }
 
 
-    //TODO:Pageup button, search History, endless scrolling with recycler
+    //TODO:Cleanup code
+    //TODO:prevent empty response from api
+    //TODO:edgecases
+    //TODO:Sizing in the button_item.xml
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -125,48 +118,83 @@ public class ScrollingActivity extends AppCompatActivity {
         CollapsingToolbarLayout toolBarLayout = (CollapsingToolbarLayout) findViewById(R.id.toolbar_layout);
         toolBarLayout.setTitle(getTitle());
 
+        initImageDisplay();
+    }
 
+
+    private void initImageDisplay() {
         RecyclerView recyclerView = findViewById(R.id.ScrollablePic);
-        LinearLayoutManager mLayoutManager = new LinearLayoutManager(this);
-        recyclerView.setLayoutManager(mLayoutManager);
-        recyclerViewAdapter = new MyRecyclerViewAdapter(this, new ArrayList<>());
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
+        recyclerView.setLayoutManager(layoutManager);
+        recyclerViewAdapter = new ImageRecyclerViewAdapter(this, new ArrayList<>());
         recyclerView.setAdapter(recyclerViewAdapter);
+
+        FloatingActionButton topScrollButton = (FloatingActionButton) findViewById(R.id.top_Sscroll_button);
+        topScrollButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                recyclerView.smoothScrollToPosition(0);
+                topScrollButton.setVisibility(View.GONE);
+            }
+        });
 
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 if (dy > 0) { //check for scroll down
-                    visibleItemCount = mLayoutManager.getChildCount();
-                    totalItemCount = mLayoutManager.getItemCount();
-                    pastVisiblesItems = mLayoutManager.findFirstVisibleItemPosition();
+                    visibleItemCount = layoutManager.getChildCount();
+                    totalItemCount = layoutManager.getItemCount();
+                    pastVisiblesItems = layoutManager.findFirstVisibleItemPosition();
 
-                    if (!loading) {
-                        if ((visibleItemCount + pastVisiblesItems) >= totalItemCount) {
+                    if (!loading) { //check if currently loading more images
+                        if ((visibleItemCount + pastVisiblesItems) >= totalItemCount) { //check if on the end of the current list
 
                             Log.d("Scrolling", "End reached");
-                            if (pageNr <= maxPageNr - 1) {
+                            if (pageNr <= maxPageNr - 1) { //check if more pages are available
                                 loading = true;
                                 pageNr++;
                                 new SearchPicturesTask().execute(curSearchTerm);
                             } else {
-
+                                ((ImageRecyclerViewAdapter) recyclerViewAdapter).setLooping(true);
                             }
                         }
                     }
+                } else if (dy < 0) { // for scroll up
+                    topScrollButton.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    //disable  scroll button after delay
+                    new Handler().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            topScrollButton.setVisibility(View.GONE);
+                        }
+                    }, 2000);
                 }
             }
         });
-
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-                new SearchPicturesTask().execute("Heidelberg");
-            }
-        });
+        imageDisplayActive = true;
     }
+
+
+    private void initHistory() {
+        imageDisplayActive = false;
+        RecyclerView recyclerView = findViewById(R.id.ScrollablePic);
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
+
+        SharedPreferences sharedPreferences = getSharedPreferences("search_history", 0);
+        Set<String> querySet = sharedPreferences.getStringSet("queries", new HashSet<String>());
+        List<String> queryList = new ArrayList<>(querySet);
+
+        recyclerViewAdapter = new ButtonRecyclerViewAdapter(this, queryList);
+        recyclerView.setAdapter(recyclerViewAdapter);
+        recyclerView.setLayoutManager(layoutManager);
+    }
+
 
     public JSONObject requestPictures(String query, int pageNr) throws IOException, JSONException {
         String urlString = "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=37ad288835e4c64f" +
@@ -193,27 +221,41 @@ public class ScrollingActivity extends AppCompatActivity {
         return json;
     }
 
-    private void addPicture(String title, String url) {
-        //TODO: remove stackoverflow link
-        //https://stackoverflow.com/questions/5776851/load-image-from-url
-        View tmpView = getLayoutInflater().inflate(R.layout.picture_view, scrollablePictures, false);
-        scrollablePictures.addView(tmpView);
-        ImageView img = (ImageView) tmpView.findViewById(R.id.imageView);
-        Picasso.get().load(url).into(img);
-    }
-
-    private void newSearch(String query) {
+    /**
+     *
+     * @param query
+     */
+    public void newSearch(String query) {
         loading = true;
         pageNr = 1;
         maxPageNr = -1;
-        recyclerViewAdapter.clear();
+        if (recyclerViewAdapter instanceof ImageRecyclerViewAdapter) {
+            ((ImageRecyclerViewAdapter) recyclerViewAdapter).setLooping(false);
+            ((ImageRecyclerViewAdapter) recyclerViewAdapter).clear();
+        } else {
+            initImageDisplay();
+            newSearch(query);
+            return;
+        }
         curSearchTerm = query;
+        CollapsingToolbarLayout collapsingToolbarLayout = findViewById(R.id.toolbar_layout);
+        collapsingToolbarLayout.setTitle("\"" + query + "\"");
+
+        SharedPreferences sharedPreferences = getSharedPreferences("search_history", 0);
+        Set<String> querySet = new HashSet<>(
+                sharedPreferences.getStringSet("queries", new HashSet<String>()));
+        querySet.add(query);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        editor.putStringSet("queries", querySet).apply();
+
         new SearchPicturesTask().execute(query);
     }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
+        super.onCreateOptionsMenu(menu);
         getMenuInflater().inflate(R.menu.menu_scrolling, menu);
         MenuItem searchItem = menu.findItem(R.id.action_search);
 
@@ -222,9 +264,9 @@ public class ScrollingActivity extends AppCompatActivity {
 
             @Override
             public boolean onQueryTextSubmit(String query) {
-                // perform query here
-                // workaround to avoid issues with some emulators and keyboard devices firing twice if a keyboard enter is used
-                // see https://code.google.com/p/android/issues/detail?id=24599
+                if (!imageDisplayActive) {
+                    initImageDisplay();
+                }
                 newSearch(query);
                 searchView.clearFocus();
                 return true;
@@ -238,21 +280,14 @@ public class ScrollingActivity extends AppCompatActivity {
         return true;
     }
 
+
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+        if (id == R.id.action_history) {
+            initHistory(); //load history into the recycler View
         }
-
-        if (id == R.id.action_search) {
-            Log.d("Scrolling", "Searchbutton");
-        }
-        return super.onOptionsItemSelected(item);
+        return true;
     }
 }
