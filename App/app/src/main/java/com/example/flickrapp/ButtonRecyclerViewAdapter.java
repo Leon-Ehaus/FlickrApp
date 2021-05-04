@@ -5,10 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.TextView;
-
-import com.squareup.picasso.Picasso;
 
 import java.util.List;
 
@@ -26,8 +23,8 @@ public class ButtonRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView
 
         ViewHolder(View itemView) {
             super(itemView);
-            textView = itemView.findViewById(R.id.queryText);
-            button = itemView.findViewById(R.id.button);
+            textView = itemView.findViewById(R.id.item_query_text);
+            button = itemView.findViewById(R.id.item_button);
         }
     }
 
@@ -50,6 +47,7 @@ public class ButtonRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView
         TextView text = ((ViewHolder) holder).textView;
         text.setText(query);
         Button button = ((ViewHolder) holder).button;
+        //Sets up OnClickListeners for the search buttons
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -65,12 +63,19 @@ public class ButtonRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView
         return mData.size();
     }
 
+    /**
+     * Deletes all items from the adapter
+     */
     public void clear() {
         int curSize = getItemCount();
         this.mData.clear();
         notifyItemRangeRemoved(0, curSize);
     }
 
+    /**
+     * Adds the items to the adapter at the end of the list
+     * @param newData a list of queries to be added
+     */
     public void addData(List<String> newData) {
         int curSize = getItemCount();
         this.mData.addAll(newData);

@@ -37,7 +37,7 @@
     <androidx.recyclerview.widget.RecyclerView xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
-        android:id="@+id/ScrollablePic"
+        android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
@@ -45,14 +45,14 @@
         tools:showIn="@layout/activity_scrolling" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/top_Sscroll_button"
+        android:id="@+id/top_scroll_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="@dimen/text_margin"
         android:rotation="90"
         android:src="?attr/homeAsUpIndicator"
         android:visibility="gone"
-        app:layout_anchor="@id/ScrollablePic"
+        app:layout_anchor="@id/recycler_view"
         app:layout_anchorGravity="bottom|end"
         app:rippleColor="#6D353232" />
 

@@ -25,7 +25,7 @@ public class ImageRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.
 
         ViewHolder(View itemView) {
             super(itemView);
-            imageView = itemView.findViewById(R.id.imageView);
+            imageView = itemView.findViewById(R.id.item_image);
         }
     }
 
@@ -45,15 +45,22 @@ public class ImageRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         String urlString = mData.get(position % mData.size());
         ImageView imageView = ((ViewHolder) holder).imageView;
+        //Load image from URL into the imageView
         Picasso.get().load(urlString).into(imageView);
     }
 
 
+    /**
+     * @return number if items in the data list or Int_Max if the adapter should loop
+     */
     @Override
     public int getItemCount() {
         return looping ? Integer.MAX_VALUE : mData.size();
     }
 
+    /**
+     * @param looping enables looping if true, disables otherwise
+     */
     public void setLooping(boolean looping) {
         if (this.looping != looping) {
             this.looping = looping;
@@ -61,12 +68,19 @@ public class ImageRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.
         }
     }
 
+    /**
+     * Deletes all items from the adapter
+     */
     public void clear() {
         int curSize = getItemCount();
         this.mData.clear();
         notifyItemRangeRemoved(0, curSize);
     }
 
+    /**
+     * Adds the items to the adapter at the end of the list
+     * @param newData a list of urls to be added
+     */
     public void addData(List<String> newData) {
         int curSize = getItemCount();
         this.mData.addAll(newData);
