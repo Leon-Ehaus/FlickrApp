@@ -43,12 +43,14 @@ import javax.net.ssl.HttpsURLConnection;
 public class ScrollingActivity extends AppCompatActivity {
 
     private RecyclerView.Adapter recyclerViewAdapter;
+    private RequestHandler requestHandler;
 
     private boolean imageDisplayActive;
 
     private String curSearchTerm;
 
     private boolean loading = false;
+
     private int pageNr = 1;
     private int maxPageNr;
 
@@ -56,56 +58,6 @@ public class ScrollingActivity extends AppCompatActivity {
     private int visibleItemCount;
     private int totalItemCount;
 
-
-    private class SearchPicturesTask extends AsyncTask<String, Void, JSONObject> {
-
-        @Override
-        protected JSONObject doInBackground(String... strings) {
-            try {
-                return requestPictures(strings[0], pageNr);
-            } catch (IOException e) {
-                e.printStackTrace();
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            return null;
-        }
-
-
-        @Override
-        protected void onPostExecute(JSONObject jsonObject) {
-            super.onPostExecute(jsonObject);
-            List<String> imageUrlStrings = new ArrayList<>();
-            try {
-                JSONObject photoPage = jsonObject.getJSONObject("photos");
-                maxPageNr = photoPage.getInt("pages");
-                if (maxPageNr == 0){//check if answer contains result
-                    failedSearch();
-                    loading = false;
-                    return;
-                }
-                //fill list with url strings for each image in the response
-                JSONArray photos = photoPage.getJSONArray("photo");
-                for (int i = 0; i < photos.length(); i++) {
-                    JSONObject photo = photos.optJSONObject(i);
-                    String urlString = "https://farm" + photo.getInt("farm") + ".static.flickr.com/" + photo.getString("server") + "/" + photo.getString("id") + "_" + photo.getString("secret") + ".jpg";
-                    imageUrlStrings.add(urlString);
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-
-            ((ImageRecyclerViewAdapter) recyclerViewAdapter).addData(imageUrlStrings);
-            loading = false;
-        }
-    }
-
-
-    //TODO:Cleanup code
-    //TODO:prevent empty response from api
-    //TODO:edgecases
-    //TODO:handle error for request
-    //TODO:Sizing in the button_item.xml
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         //Setup Layout
@@ -115,6 +67,7 @@ public class ScrollingActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         CollapsingToolbarLayout toolBarLayout = (CollapsingToolbarLayout) findViewById(R.id.toolbar_layout);
         toolBarLayout.setTitle(getTitle());
+        requestHandler = new RequestHandler();
 
         initImageDisplay();
     }
@@ -153,13 +106,8 @@ public class ScrollingActivity extends AppCompatActivity {
                         if ((visibleItemCount + pastVisibleItems) >= totalItemCount) { //check if on the end of the current list
 
                             Log.d("Scrolling", "End reached");
-                            if (pageNr <= maxPageNr - 1) { //check if more pages are available
-                                loading = true;
-                                pageNr++;
-                                new SearchPicturesTask().execute(curSearchTerm);
-                            } else {
-                                //start looping the images
-                                ((ImageRecyclerViewAdapter) recyclerViewAdapter).setLooping(true);
+                            if (!searchNextPage()) { //load next page
+                                ((ImageRecyclerViewAdapter) recyclerViewAdapter).setLooping(true);//execute if no next page exists
                             }
                         }
                     }
@@ -207,44 +155,9 @@ public class ScrollingActivity extends AppCompatActivity {
 
 
     /**
-     * Sends the search request to the Flickr API and returns the answer
-     * @param query the search term
-     * @param pageNr the page number that will be requested
-     * @return the unfiltered answer from the Flickr API
-     * @throws IOException
-     * @throws JSONException
-     */
-    private JSONObject requestPictures(String query, int pageNr) throws IOException, JSONException {
-        //Put together the request URL and establish the connection
-        String urlString = "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=37ad288835e4c64f" +
-                "c0cb8af3f3a1a65d&format=json&nojsoncallback=1&page=" + pageNr + "&safe_search=1&text=" + query;
-        URL url = new URL(urlString);
-        HttpsURLConnection urlConnection = (HttpsURLConnection) url.openConnection();
-        String jsonString = null;
-        try {
-            //Read API response into String
-            InputStream in = new BufferedInputStream(urlConnection.getInputStream());
-
-            BufferedReader streamReader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-            StringBuilder responseStrBuilder = new StringBuilder();
-
-            String inputStr;
-            while ((inputStr = streamReader.readLine()) != null) {
-                responseStrBuilder.append(inputStr);
-            }
-            jsonString = responseStrBuilder.toString();
-
-        } finally {
-            urlConnection.disconnect();
-        }
-        JSONObject json = new JSONObject(jsonString);
-        Log.d("Scrolling", json.toString());
-        return json;
-    }
-
-    /**
      * Starts a new search for images using the Flickr API
      * and saves the query in the search history
+     *
      * @param query the search term
      */
     public void newSearch(String query) {
@@ -273,16 +186,70 @@ public class ScrollingActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putStringSet("queries", querySet).apply();
         //start request in the background
-        new SearchPicturesTask().execute(query);
+        requestHandler.search(query, pageNr, this::addImageUrls);
     }
 
+    /**
+     * Requests next page of the current query.
+     * If no additional page exists, returns false
+     *
+     * @return true if next page exists, false otherwise
+     */
+    private boolean searchNextPage() {
+        if (pageNr <= maxPageNr - 1) {
+            loading = true;
+            requestHandler.search(curSearchTerm, ++pageNr, this::addImageUrls);
+            return true;
+        } else {
+            return false;
+        }
+    }
 
-    //TODO:Change toast background
-    private void failedSearch(){
-        Toast toast = Toast.makeText(this,getString(R.string.no_images),Toast.LENGTH_LONG);
+    /**
+     * Alerts the user that no images were found
+     */
+    private void failedSearch() {
+        Toast toast = Toast.makeText(getBaseContext(), getString(R.string.no_images), Toast.LENGTH_LONG);
         toast.show();
+        loading = false;
     }
 
+    /**
+     * displays the error message to the user
+     *
+     * @param msg message to be displayed
+     */
+    private void failedSearch(String msg) {
+        Toast toast = Toast.makeText(getBaseContext(), msg, Toast.LENGTH_LONG);
+        toast.show();
+        loading = false;
+    }
+
+    /**
+     * Adds the Images corresponding to the ImageUrls to the scrolling recycler view
+     *
+     * @param newUrls the urls that will be added
+     * @param pageMax if error in request -1,
+     *                if no results 0,
+     *                the number of pages the Flickr API provides for this search term otherwise
+     */
+    public void addImageUrls(@NonNull List<String> newUrls, int pageMax) {
+        if (pageMax == -1) {
+            failedSearch(newUrls.get(0));
+            return;
+        } else if (pageMax == 0 || newUrls.isEmpty()) {
+            failedSearch();
+            return;
+        }
+        if (recyclerViewAdapter instanceof ImageRecyclerViewAdapter) {
+            ((ImageRecyclerViewAdapter) recyclerViewAdapter).addData(newUrls);
+        } else {
+            initImageDisplay();
+            addImageUrls(newUrls, pageMax);
+        }
+        this.maxPageNr = pageMax;
+        loading = false;
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
